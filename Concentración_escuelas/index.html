@@ -1,0 +1,612 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="initial-scale=1,user-scalable=no,maximum-scale=1,width=device-width">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <link rel="stylesheet" href="css/leaflet.css">
+        <link rel="stylesheet" href="css/L.Control.Layers.Tree.css">
+        <link rel="stylesheet" href="css/qgis2web.css">
+        <link rel="stylesheet" href="css/fontawesome-all.min.css">
+        <style>
+        html, body, #map {
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            margin: 0;
+        }
+        </style>
+        <title>Clusters de Educación</title>
+    </head>
+    <body>
+        <div id="map">
+        </div>
+        <script src="js/qgis2web_expressions.js"></script>
+        <script src="js/leaflet.js"></script>
+        <script src="js/L.Control.Layers.Tree.min.js"></script>
+        <script src="js/leaflet.rotatedMarker.js"></script>
+        <script src="js/leaflet.pattern.js"></script>
+        <script src="js/leaflet-hash.js"></script>
+        <script src="js/Autolinker.min.js"></script>
+        <script src="js/rbush.min.js"></script>
+        <script src="js/labelgun.min.js"></script>
+        <script src="js/labels.js"></script>
+        <script src="data/Municipios_1.js"></script>
+        <script src="data/PuntosEscuelassinrevision_2.js"></script>
+        <script src="data/PolgonosEducacintotal1km_3.js"></script>
+        <script>
+        var highlightLayer;
+        function highlightFeature(e) {
+            highlightLayer = e.target;
+
+            if (e.target.feature.geometry.type === 'LineString' || e.target.feature.geometry.type === 'MultiLineString') {
+              highlightLayer.setStyle({
+                color: '#ffff00',
+              });
+            } else {
+              highlightLayer.setStyle({
+                fillColor: '#ffff00',
+                fillOpacity: 1
+              });
+            }
+            highlightLayer.openPopup();
+        }
+        var map = L.map('map', {
+            zoomControl:false, maxZoom:28, minZoom:1
+        }).fitBounds([[26.80119335905948,-101.60258401458395],[27.01749213868384,-101.23455331805056]]);
+        var hash = new L.Hash(map);
+        map.attributionControl.setPrefix('<a href="https://github.com/tomchadwin/qgis2web" target="_blank">qgis2web</a> &middot; <a href="https://leafletjs.com" title="A JS library for interactive maps">Leaflet</a> &middot; <a href="https://qgis.org">QGIS</a>');
+        var autolinker = new Autolinker({truncate: {length: 30, location: 'smart'}});
+        // remove popup's row if "visible-with-data"
+        function removeEmptyRowsFromPopupContent(content, feature) {
+         var tempDiv = document.createElement('div');
+         tempDiv.innerHTML = content;
+         var rows = tempDiv.querySelectorAll('tr');
+         for (var i = 0; i < rows.length; i++) {
+             var td = rows[i].querySelector('td.visible-with-data');
+             var key = td ? td.id : '';
+             if (td && td.classList.contains('visible-with-data') && feature.properties[key] == null) {
+                 rows[i].parentNode.removeChild(rows[i]);
+             }
+         }
+         return tempDiv.innerHTML;
+        }
+        // add class to format popup if it contains media
+		function addClassToPopupIfMedia(content, popup) {
+			var tempDiv = document.createElement('div');
+			tempDiv.innerHTML = content;
+			if (tempDiv.querySelector('td img')) {
+				popup._contentNode.classList.add('media');
+					// Delay to force the redraw
+					setTimeout(function() {
+						popup.update();
+					}, 10);
+			} else {
+				popup._contentNode.classList.remove('media');
+			}
+		}
+        var title = new L.Control({'position':'topleft'});
+        title.onAdd = function (map) {
+            this._div = L.DomUtil.create('div', 'info');
+            this.update();
+            return this._div;
+        };
+        title.update = function () {
+            this._div.innerHTML = '<h2>Clusters de Educación</h2>';
+        };
+        title.addTo(map);
+        var abstract = new L.Control({'position':'topleft'});
+        abstract.onAdd = function (map) {
+            this._div = L.DomUtil.create('div',
+            'leaflet-control abstract');
+            this._div.id = 'abstract'
+                this._div.setAttribute("onmouseenter", "abstract.show()");
+                this._div.setAttribute("onmouseleave", "abstract.hide()");
+                this.hide();
+                return this._div;
+            };
+            abstract.hide = function () {
+                this._div.classList.remove("abstractUncollapsed");
+                this._div.classList.add("abstract");
+                this._div.innerHTML = 'i'
+            }
+            abstract.show = function () {
+                this._div.classList.remove("abstract");
+                this._div.classList.add("abstractUncollapsed");
+                this._div.innerHTML = 'Clusters de distribución de escuelas por tamaño<br /><br />Se muestran los clusters de las escuelas que hay en el estado de Coahuila de acuerdo a los siguientes tamaños: <br /><br />0 a 5 Empleados<br />6 a 10 Empleados<br />11 a 30 Empleados<br />31 a 50 Empleados<br />51 a 100 Empleados<br />101 a 250 Empleados<br />251 y + Empleados';
+        };
+        abstract.addTo(map);
+        var zoomControl = L.control.zoom({
+            position: 'topleft'
+        }).addTo(map);
+        var bounds_group = new L.featureGroup([]);
+        function setBounds() {
+        }
+        map.createPane('pane_GoogleRoad_0');
+        map.getPane('pane_GoogleRoad_0').style.zIndex = 400;
+        var layer_GoogleRoad_0 = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+            pane: 'pane_GoogleRoad_0',
+            opacity: 1.0,
+            attribution: '<a href="https://www.google.at/permissions/geoguidelines/attr-guide.html">Map data ©2015 Google</a>',
+            minZoom: 1,
+            maxZoom: 28,
+            minNativeZoom: 0,
+            maxNativeZoom: 20
+        });
+        layer_GoogleRoad_0;
+        map.addLayer(layer_GoogleRoad_0);
+        function pop_Municipios_1(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    for (var i in e.target._eventParents) {
+                        if (typeof e.target._eventParents[i].resetStyle === 'function') {
+                            e.target._eventParents[i].resetStyle(e.target);
+                        }
+                    }
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_Municipios_1_0() {
+            return {
+                pane: 'pane_Municipios_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 2.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(133,182,111,0.0)',
+                interactive: false,
+            }
+        }
+        map.createPane('pane_Municipios_1');
+        map.getPane('pane_Municipios_1').style.zIndex = 401;
+        map.getPane('pane_Municipios_1').style['mix-blend-mode'] = 'normal';
+        var layer_Municipios_1 = new L.geoJson(json_Municipios_1, {
+            attribution: '',
+            interactive: false,
+            dataVar: 'json_Municipios_1',
+            layerName: 'layer_Municipios_1',
+            pane: 'pane_Municipios_1',
+            onEachFeature: pop_Municipios_1,
+            style: style_Municipios_1_0,
+        });
+        bounds_group.addLayer(layer_Municipios_1);
+        map.addLayer(layer_Municipios_1);
+        function pop_PuntosEscuelassinrevision_2(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    for (var i in e.target._eventParents) {
+                        if (typeof e.target._eventParents[i].resetStyle === 'function') {
+                            e.target._eventParents[i].resetStyle(e.target);
+                        }
+                    }
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <td colspan="2"><strong>Nombre de la escuela:</strong><br />' + (feature.properties['nom_estab'] !== null ? autolinker.link(feature.properties['nom_estab'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_PuntosEscuelassinrevision_2_0(feature) {
+            switch(String(feature.properties['per_ocu'])) {
+                case '0 a 5':
+                    return {
+                pane: 'pane_PuntosEscuelassinrevision_2',
+                radius: 4.0,
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1,
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(247,251,255,1.0)',
+                interactive: true,
+            }
+                    break;
+                case '6 a 10':
+                    return {
+                pane: 'pane_PuntosEscuelassinrevision_2',
+                radius: 4.0,
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1,
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(215,230,245,1.0)',
+                interactive: true,
+            }
+                    break;
+                case '11 a 30':
+                    return {
+                pane: 'pane_PuntosEscuelassinrevision_2',
+                radius: 4.0,
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1,
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(175,209,231,1.0)',
+                interactive: true,
+            }
+                    break;
+                case '31 a 50':
+                    return {
+                pane: 'pane_PuntosEscuelassinrevision_2',
+                radius: 4.0,
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1,
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(115,178,216,1.0)',
+                interactive: true,
+            }
+                    break;
+                case '51 a 100':
+                    return {
+                pane: 'pane_PuntosEscuelassinrevision_2',
+                radius: 4.0,
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1,
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(62,142,196,1.0)',
+                interactive: true,
+            }
+                    break;
+                case '101 a 250':
+                    return {
+                pane: 'pane_PuntosEscuelassinrevision_2',
+                radius: 4.0,
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1,
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(22,99,170,1.0)',
+                interactive: true,
+            }
+                    break;
+                case '251 y +':
+                    return {
+                pane: 'pane_PuntosEscuelassinrevision_2',
+                radius: 4.0,
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1,
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(8,48,107,1.0)',
+                interactive: true,
+            }
+                    break;
+            }
+        }
+        map.createPane('pane_PuntosEscuelassinrevision_2');
+        map.getPane('pane_PuntosEscuelassinrevision_2').style.zIndex = 402;
+        map.getPane('pane_PuntosEscuelassinrevision_2').style['mix-blend-mode'] = 'normal';
+        var layer_PuntosEscuelassinrevision_2 = new L.geoJson(json_PuntosEscuelassinrevision_2, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_PuntosEscuelassinrevision_2',
+            layerName: 'layer_PuntosEscuelassinrevision_2',
+            pane: 'pane_PuntosEscuelassinrevision_2',
+            onEachFeature: pop_PuntosEscuelassinrevision_2,
+            pointToLayer: function (feature, latlng) {
+                var context = {
+                    feature: feature,
+                    variables: {}
+                };
+                return L.circleMarker(latlng, style_PuntosEscuelassinrevision_2_0(feature));
+            },
+        });
+        bounds_group.addLayer(layer_PuntosEscuelassinrevision_2);
+        map.addLayer(layer_PuntosEscuelassinrevision_2);
+        function pop_PolgonosEducacintotal1km_3(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    for (var i in e.target._eventParents) {
+                        if (typeof e.target._eventParents[i].resetStyle === 'function') {
+                            e.target._eventParents[i].resetStyle(e.target);
+                        }
+                    }
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <td colspan="2"><strong>Escuelas por polígono:</strong><br />' + (feature.properties['Escuelas'] !== null ? autolinker.link(feature.properties['Escuelas'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_PolgonosEducacintotal1km_3_0(feature) {
+            if (feature.properties['Escuelas'] >= 1.000000 && feature.properties['Escuelas'] <= 3.000000 ) {
+                return {
+                pane: 'pane_PolgonosEducacintotal1km_3',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.75)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(247,251,255,0.75)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['Escuelas'] >= 3.000000 && feature.properties['Escuelas'] <= 5.000000 ) {
+                return {
+                pane: 'pane_PolgonosEducacintotal1km_3',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.75)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(223,236,247,0.75)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['Escuelas'] >= 5.000000 && feature.properties['Escuelas'] <= 7.000000 ) {
+                return {
+                pane: 'pane_PolgonosEducacintotal1km_3',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.75)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(200,220,240,0.75)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['Escuelas'] >= 7.000000 && feature.properties['Escuelas'] <= 9.000000 ) {
+                return {
+                pane: 'pane_PolgonosEducacintotal1km_3',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.75)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(163,204,227,0.75)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['Escuelas'] >= 9.000000 && feature.properties['Escuelas'] <= 11.000000 ) {
+                return {
+                pane: 'pane_PolgonosEducacintotal1km_3',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.75)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(115,178,216,0.75)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['Escuelas'] >= 11.000000 && feature.properties['Escuelas'] <= 13.000000 ) {
+                return {
+                pane: 'pane_PolgonosEducacintotal1km_3',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.75)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(74,151,201,0.75)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['Escuelas'] >= 13.000000 && feature.properties['Escuelas'] <= 15.000000 ) {
+                return {
+                pane: 'pane_PolgonosEducacintotal1km_3',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.75)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(41,121,185,0.75)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['Escuelas'] >= 15.000000 && feature.properties['Escuelas'] <= 17.000000 ) {
+                return {
+                pane: 'pane_PolgonosEducacintotal1km_3',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.75)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(13,88,161,0.75)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['Escuelas'] >= 17.000000 && feature.properties['Escuelas'] <= 19.000000 ) {
+                return {
+                pane: 'pane_PolgonosEducacintotal1km_3',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.75)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(8,48,107,0.75)',
+                interactive: true,
+            }
+            }
+        }
+        map.createPane('pane_PolgonosEducacintotal1km_3');
+        map.getPane('pane_PolgonosEducacintotal1km_3').style.zIndex = 403;
+        map.getPane('pane_PolgonosEducacintotal1km_3').style['mix-blend-mode'] = 'normal';
+        var layer_PolgonosEducacintotal1km_3 = new L.geoJson(json_PolgonosEducacintotal1km_3, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_PolgonosEducacintotal1km_3',
+            layerName: 'layer_PolgonosEducacintotal1km_3',
+            pane: 'pane_PolgonosEducacintotal1km_3',
+            onEachFeature: pop_PolgonosEducacintotal1km_3,
+            style: style_PolgonosEducacintotal1km_3_0,
+        });
+        bounds_group.addLayer(layer_PolgonosEducacintotal1km_3);
+        map.addLayer(layer_PolgonosEducacintotal1km_3);
+        var baseMaps = {};
+        var overlaysTree = [
+            {label: 'Polígonos Educación total (1km)<br /><table><tr><td style="text-align: center;"><img src="legend/PolgonosEducacintotal1km_3_130.png" /></td><td>1 - 3</td></tr><tr><td style="text-align: center;"><img src="legend/PolgonosEducacintotal1km_3_351.png" /></td><td>3 - 5</td></tr><tr><td style="text-align: center;"><img src="legend/PolgonosEducacintotal1km_3_572.png" /></td><td>5 - 7</td></tr><tr><td style="text-align: center;"><img src="legend/PolgonosEducacintotal1km_3_793.png" /></td><td>7 - 9</td></tr><tr><td style="text-align: center;"><img src="legend/PolgonosEducacintotal1km_3_9114.png" /></td><td>9 - 11</td></tr><tr><td style="text-align: center;"><img src="legend/PolgonosEducacintotal1km_3_11135.png" /></td><td>11 - 13</td></tr><tr><td style="text-align: center;"><img src="legend/PolgonosEducacintotal1km_3_13156.png" /></td><td>13 - 15</td></tr><tr><td style="text-align: center;"><img src="legend/PolgonosEducacintotal1km_3_15177.png" /></td><td>15 - 17</td></tr><tr><td style="text-align: center;"><img src="legend/PolgonosEducacintotal1km_3_17198.png" /></td><td>17 - 19</td></tr></table>', layer: layer_PolgonosEducacintotal1km_3},
+            {label: 'Puntos Escuelas sin revisión<br /><table><tr><td style="text-align: center;"><img src="legend/PuntosEscuelassinrevision_2_0a50.png" /></td><td>0 a 5</td></tr><tr><td style="text-align: center;"><img src="legend/PuntosEscuelassinrevision_2_6a101.png" /></td><td>6 a 10</td></tr><tr><td style="text-align: center;"><img src="legend/PuntosEscuelassinrevision_2_11a302.png" /></td><td>11 a 30</td></tr><tr><td style="text-align: center;"><img src="legend/PuntosEscuelassinrevision_2_31a503.png" /></td><td>31 a 50</td></tr><tr><td style="text-align: center;"><img src="legend/PuntosEscuelassinrevision_2_51a1004.png" /></td><td>51 a 100</td></tr><tr><td style="text-align: center;"><img src="legend/PuntosEscuelassinrevision_2_101a2505.png" /></td><td>101 a 250</td></tr><tr><td style="text-align: center;"><img src="legend/PuntosEscuelassinrevision_2_251y6.png" /></td><td>251 y +</td></tr></table>', layer: layer_PuntosEscuelassinrevision_2},
+            {label: '<img src="legend/Municipios_1.png" /> Municipios', layer: layer_Municipios_1},
+            {label: "Google Road", layer: layer_GoogleRoad_0},]
+        var lay = L.control.layers.tree(null, overlaysTree,{
+            //namedToggle: true,
+            //selectorBack: false,
+            //closedSymbol: '&#8862; &#x1f5c0;',
+            //openedSymbol: '&#8863; &#x1f5c1;',
+            //collapseAll: 'Collapse all',
+            //expandAll: 'Expand all',
+            collapsed: false, 
+        });
+        lay.addTo(map);
+		document.addEventListener("DOMContentLoaded", function() {
+            // set new Layers List height which considers toggle icon
+            function newLayersListHeight() {
+                var layerScrollbarElement = document.querySelector('.leaflet-control-layers-scrollbar');
+                if (layerScrollbarElement) {
+                    var layersListElement = document.querySelector('.leaflet-control-layers-list');
+                    var originalHeight = layersListElement.style.height 
+                        || window.getComputedStyle(layersListElement).height;
+                    var newHeight = parseFloat(originalHeight) - 50;
+                    layersListElement.style.height = newHeight + 'px';
+                }
+            }
+            var isLayersListExpanded = true;
+            var controlLayersElement = document.querySelector('.leaflet-control-layers');
+            var toggleLayerControl = document.querySelector('.leaflet-control-layers-toggle');
+            // toggle Collapsed/Expanded and apply new Layers List height
+            toggleLayerControl.addEventListener('click', function() {
+                if (isLayersListExpanded) {
+                    controlLayersElement.classList.remove('leaflet-control-layers-expanded');
+                } else {
+                    controlLayersElement.classList.add('leaflet-control-layers-expanded');
+                }
+                isLayersListExpanded = !isLayersListExpanded;
+                newLayersListHeight()
+            });	
+			// apply new Layers List height if toggle layerstree
+			if (controlLayersElement) {
+				controlLayersElement.addEventListener('click', function(event) {
+					var toggleLayerHeaderPointer = event.target.closest('.leaflet-layerstree-header-pointer span');
+					if (toggleLayerHeaderPointer) {
+						newLayersListHeight();
+					}
+				});
+			}
+            // Collapsed/Expanded at Start to apply new height
+            setTimeout(function() {
+                toggleLayerControl.click();
+            }, 10);
+            setTimeout(function() {
+                toggleLayerControl.click();
+            }, 10);
+            // Collapsed touch/small screen
+            var isSmallScreen = window.innerWidth < 650;
+            if (isSmallScreen) {
+                setTimeout(function() {
+                    controlLayersElement.classList.remove('leaflet-control-layers-expanded');
+                    isLayersListExpanded = !isLayersListExpanded;
+                }, 500);
+            }  
+        });       
+        setBounds();
+        </script>
+    </body>
+</html>
