@@ -1,1 +1,0 @@
-var json_OficinaValleReal_3 = {"type":"FeatureCollection","name":"OficinaValleReal_3","crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:OGC:1.3:CRS84"}},"features":[{"type":"Feature","properties":{"field_1":"Oficina Valle Real","Latitud":25.47232,"Longitud":-100.96391},"geometry":{"type":"Point","coordinates":[-100.9639146,25.47231847]}}]}
